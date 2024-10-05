@@ -104,8 +104,8 @@ public:
 
 
     // This is the pose when power on.
-    const DOF6Kinematic::Joint6D_t REST_POSE = {0, -73, 180, 0, 0, 0};
-    const float DEFAULT_JOINT_SPEED = 30;  // degree/s
+    const DOF6Kinematic::Joint6D_t REST_POSE = {0, -165, 90, 0, 0, 0};//{0, -73, 180, 0, 0, 0};
+    const float DEFAULT_JOINT_SPEED = 30;  // r/s
     const DOF6Kinematic::Joint6D_t DEFAULT_JOINT_ACCELERATION_BASES = {150, 100, 200, 200, 200, 200};
     const float DEFAULT_JOINT_ACCELERATION_LOW = 30;    // 0~100
     const float DEFAULT_JOINT_ACCELERATION_HIGH = 100;  // 0~100
@@ -121,9 +121,15 @@ public:
     CtrlStepMotor* motorJ[7] = {nullptr};
     DummyHand* hand = {nullptr};
 
+    //添加一个IK运算结果存储，用来在oled显示
+    DOF6Kinematic::Joint6D_t ikResultJoint = {};
+
+
+
 
     void Init();
     bool MoveJ(float _j1, float _j2, float _j3, float _j4, float _j5, float _j6);
+    bool ikCalculate(float _x, float _y, float _z, float _a, float _b, float _c);
     bool MoveL(float _x, float _y, float _z, float _a, float _b, float _c);
     void MoveJoints(DOF6Kinematic::Joint6D_t _joints);
     void SetJointSpeed(float _speed);
@@ -167,7 +173,10 @@ public:
             make_protocol_function("set_joint_speed", *this, &DummyRobot::SetJointSpeed, "speed"),
             make_protocol_function("set_joint_acc", *this, &DummyRobot::SetJointAcceleration, "acc"),
             make_protocol_function("set_command_mode", *this, &DummyRobot::SetCommandMode, "mode"),
-            make_protocol_object("tuning", tuningHelper.MakeProtocolDefinitions())
+            make_protocol_object("tuning", tuningHelper.MakeProtocolDefinitions()),
+
+            //添加一个IK运算结果给用户
+            make_protocol_function("ik_calculate", *this, &DummyRobot::ikCalculate, "x", "y", "z", "a", "b", "c")
         );
     }
 

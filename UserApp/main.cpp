@@ -148,6 +148,10 @@ void ThreadOledUpdate(void* argument)
                     (int) roundf(dummy.currentJoints.a[0]), (int) roundf(dummy.currentJoints.a[1]),
                     (int) roundf(dummy.currentJoints.a[2]), (int) roundf(dummy.currentJoints.a[3]),
                     (int) roundf(dummy.currentJoints.a[4]), (int) roundf(dummy.currentJoints.a[5]));
+        // oled.printf(">%3d|%3d|%3d|%3d|%3d|%3d",
+        //     (int) roundf(dummy.ikResultJoint.a[0]), (int) roundf(dummy.ikResultJoint.a[1]),
+        //     (int) roundf(dummy.ikResultJoint.a[2]), (int) roundf(dummy.ikResultJoint.a[3]),
+        //     (int) roundf(dummy.ikResultJoint.a[4]), (int) roundf(dummy.ikResultJoint.a[5]));
 
         oled.drawBox(40, 35, 128, 24);
         oled.setFont(u8g2_font_6x12_tr);

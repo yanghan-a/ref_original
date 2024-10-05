@@ -26,6 +26,7 @@ private:
     float L1_base[3] = {0};
     float L2_arm[3] = {0};
     float L3_elbow[3] = {0};
+    float L4_forearm[3] = {0};
     float L6_wrist[3] = {0};
 
     float l_se_2;

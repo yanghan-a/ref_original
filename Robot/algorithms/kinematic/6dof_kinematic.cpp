@@ -1,5 +1,5 @@
 #include "6dof_kinematic.h"
-
+#include "communication.hpp"
 inline float cosf(float x)
 {
     return arm_cos_f32(x);
@@ -29,8 +29,8 @@ static void MatMultiply(const float* _matrix1, const float* _matrix2, float* _ma
     }
 }
 
-static void RotMatToEulerAngle(const float* _rotationM, float* _eulerAngles)//XYZ固定角
-{
+static void RotMatToEulerAngle(const float* _rotationM, float* _eulerAngles)
+{//旋转矩阵转XYZ固定角
     float A, B, C, cb;
 
     if (fabs(_rotationM[6]) >= 1.0 - 0.0001)
@@ -48,10 +48,10 @@ static void RotMatToEulerAngle(const float* _rotationM, float* _eulerAngles)//XY
         }
     } else
     {
-        B = atan2f(-_rotationM[6], sqrtf(_rotationM[0] * _rotationM[0] + _rotationM[3] * _rotationM[3]));
+        B = atan2f(-_rotationM[6], sqrtf(_rotationM[0] * _rotationM[0] + _rotationM[3] * _rotationM[3]));//beta
         cb = cosf(B);
-        A = atan2f(_rotationM[3] / cb, _rotationM[0] / cb);
-        C = atan2f(_rotationM[7] / cb, _rotationM[8] / cb);
+        A = atan2f(_rotationM[3] / cb, _rotationM[0] / cb);//alpha
+        C = atan2f(_rotationM[7] / cb, _rotationM[8] / cb);//gama
     }
 
     _eulerAngles[0] = C;
@@ -88,20 +88,22 @@ DOF6Kinematic::DOF6Kinematic(float L_BS, float D_BS, float L_AM, float L_FA, flo
     float tmp_DH_matrix[6][4] = {// theta, d, a, alpha
         {0.0f,            armConfig.L_BASE,    armConfig.D_BASE, -(float) M_PI_2},
         {-(float) M_PI_2, 0.0f,                armConfig.L_ARM,  0.0f},
-        {(float) M_PI_2,  armConfig.D_ELBOW,   0.0f,             (float) M_PI_2},//-->{0.0f,  0.0f,   armConfig.D_ELBOW, -(float) M_PI_2}
+        {0.0f,            0.0f,                armConfig.D_ELBOW, -(float) M_PI_2},//-->{0.0f,  0.0f,   armConfig.D_ELBOW, -(float) M_PI_2}
         {0.0f,            armConfig.L_FOREARM, 0.0f,             -(float) M_PI_2},
         {0.0f,            0.0f,                0.0f,             (float) M_PI_2},
-        {0.0f,            armConfig.L_WRIST, 0.0f, 0.0f}
+        {0.0f,            armConfig.L_WRIST  , 0.0f,               0.0f}
     };
     memcpy(DH_matrix, tmp_DH_matrix, sizeof(tmp_DH_matrix));
 
-    float tmp_L1_bs[3] = {armConfig.D_BASE, -armConfig.L_BASE, 0.0f};
+    float tmp_L1_bs[3] = {armConfig.D_BASE, -armConfig.L_BASE, 0.0f};//这里的定义与一个关系有关就是坐标系A在B中的位置和B在A中的位置的关系
     memcpy(L1_base, tmp_L1_bs, sizeof(tmp_L1_bs));
     float tmp_L2_se[3] = {armConfig.L_ARM, 0.0f, 0.0f};
     memcpy(L2_arm, tmp_L2_se, sizeof(tmp_L2_se));
-    float tmp_L3_ew[3] = {-armConfig.D_ELBOW, 0.0f, armConfig.L_FOREARM};
+    float tmp_L3_ew[3] = {armConfig.D_ELBOW, 0.0f, 0.0f};
     memcpy(L3_elbow, tmp_L3_ew, sizeof(tmp_L3_ew));
-    float tmp_L6_wt[3] = {0.0f, 0.0f, armConfig.L_WRIST};
+    float tmp_L4_forearm[3] = {0.0f, -armConfig.L_FOREARM, 0.0f};
+    memcpy(L4_forearm, tmp_L4_forearm, sizeof(tmp_L4_forearm));
+    float tmp_L6_wt[3] = {0.0f, 0.0f, armConfig.L_WRIST};//注意这里加了负号
     memcpy(L6_wrist, tmp_L6_wt, sizeof(tmp_L6_wt));
 
     l_se_2 = armConfig.L_ARM * armConfig.L_ARM;
@@ -120,7 +122,7 @@ DOF6Kinematic::SolveFK(const DOF6Kinematic::Joint6D_t &_inputJoint6D, DOF6Kinema
     float cosa, sina;
     float P06[6];
     float R06[9];
-    float R[6][9];
+    float R[6][9];//6个关节的旋转矩阵
     float R02[9];
     float R03[9];
     float R04[9];
@@ -128,14 +130,15 @@ DOF6Kinematic::SolveFK(const DOF6Kinematic::Joint6D_t &_inputJoint6D, DOF6Kinema
     float L0_bs[3];
     float L0_se[3];
     float L0_ew[3];
+    float L0_fa[3];
     float L0_wt[3];
 
     for (int i = 0; i < 6; i++)
-        q_in[i] = _inputJoint6D.a[i] / RAD_TO_DEG;
+        q_in[i] = _inputJoint6D.a[i] / RAD_TO_DEG;//把输入的关节角度转为弧度
 
     for (int i = 0; i < 6; i++)
     {
-        q[i] = q_in[i] + DH_matrix[i][0];
+        q[i] = q_in[i];//q_in[i] + DH_matrix[i][0];
         cosq = cosf(q[i]);
         sinq = sinf(q[i]);
         cosa = cosf(DH_matrix[i][3]);
@@ -161,10 +164,11 @@ DOF6Kinematic::SolveFK(const DOF6Kinematic::Joint6D_t &_inputJoint6D, DOF6Kinema
     MatMultiply(R[0], L1_base, L0_bs, 3, 3, 1);
     MatMultiply(R02, L2_arm, L0_se, 3, 3, 1);
     MatMultiply(R03, L3_elbow, L0_ew, 3, 3, 1);
+    MatMultiply(R04, L4_forearm, L0_fa, 3, 3, 1);
     MatMultiply(R06, L6_wrist, L0_wt, 3, 3, 1);
 
     for (int i = 0; i < 3; i++)
-        P06[i] = L0_bs[i] + L0_se[i] + L0_ew[i] + L0_wt[i];
+        P06[i] = L0_bs[i] + L0_se[i] + L0_ew[i] + L0_fa[i] + L0_wt[i];
 
     RotMatToEulerAngle(R06, &(P06[3]));
 
@@ -182,14 +186,14 @@ DOF6Kinematic::SolveFK(const DOF6Kinematic::Joint6D_t &_inputJoint6D, DOF6Kinema
 bool DOF6Kinematic::SolveIK(const DOF6Kinematic::Pose6D_t &_inputPose6D, const Joint6D_t &_lastJoint6D,
                             DOF6Kinematic::IKSolves_t &_outputSolves)
 {
-    float qs[2];
-    float qa[2][2];
-    float qw[2][3];
+    float qs[2];//theta1
+    float qa[2][2];//theta2、theta3
+    float qw[2][3];//theta4、theta5、theta6
     float cosqs, sinqs;
     float cosqa[2], sinqa[2];
     float cosqw, sinqw;
-    float P06[6];
-    float R06[9];
+    float P06[6];//六维姿态
+    float R06[9];//旋转矩阵
     float P0_w[3];
     float P1_w[3];
     float L0_wt[3];
@@ -209,15 +213,15 @@ bool DOF6Kinematic::SolveIK(const DOF6Kinematic::Pose6D_t &_inputPose6D, const J
         atan_e = atanf(armConfig.D_ELBOW / armConfig.L_FOREARM);
     }
 
-    P06[0] = _inputPose6D.X / 1000.0f;
+    P06[0] = _inputPose6D.X / 1000.0f;//转换为m
     P06[1] = _inputPose6D.Y / 1000.0f;
     P06[2] = _inputPose6D.Z / 1000.0f;
-    if (!_inputPose6D.hasR)
+    if (!_inputPose6D.hasR)//转换为弧度制
     {
         P06[3] = _inputPose6D.A / RAD_TO_DEG;
         P06[4] = _inputPose6D.B / RAD_TO_DEG;
         P06[5] = _inputPose6D.C / RAD_TO_DEG;
-        EulerAngleToRotMat(&(P06[3]), R06);
+        EulerAngleToRotMat(&(P06[3]), R06);//计算XYZ固定角对应的旋转矩阵
     } else
     {
         memcpy(R06, _inputPose6D.R, 9 * sizeof(float));
@@ -231,24 +235,24 @@ bool DOF6Kinematic::SolveIK(const DOF6Kinematic::Pose6D_t &_inputPose6D, const J
         qw[i][1] = _lastJoint6D.a[4];
         qw[i][2] = _lastJoint6D.a[5];
     }
-    MatMultiply(R06, L6_wrist, L0_wt, 3, 3, 1);
-    for (i = 0; i < 3; i++)
+    MatMultiply(R06, L6_wrist, L0_wt, 3, 3, 1);//计算最后一个L_WRIST在0坐标系中的向量
+    for (i = 0; i < 3; i++)//计算关节4、5的坐标点
     {
-        P0_w[i] = P06[i] - L0_wt[i];
+        P0_w[i] = P06[i] - L0_wt[i];//用末端在0坐标系中的坐标减去link L_WRIST在0坐标系中的坐标，得到共轴点的位置
     }
-    if (sqrt(P0_w[0] * P0_w[0] + P0_w[1] * P0_w[1]) <= 0.000001)
-    {
+    if (sqrt(P0_w[0] * P0_w[0] + P0_w[1] * P0_w[1]) <= 0.000001)//判断x、y坐标是否为0
+    {//这个情况可以直接忽略，机械臂不可能到达这个位置
         qs[0] = _lastJoint6D.a[0];
         qs[1] = _lastJoint6D.a[0];
         for (i = 0; i < 4; i++)
         {
-            _outputSolves.solFlag[0 + i][0] = -1;
+            _outputSolves.solFlag[0 + i][0] = -1;//感觉这个标志位是用来判断是否有解的
             _outputSolves.solFlag[4 + i][0] = -1;
         }
     } else
     {
-        qs[0] = atan2f(P0_w[1], P0_w[0]);
-        qs[1] = atan2f(-P0_w[1], -P0_w[0]);
+        qs[0] = atan2f(P0_w[1], P0_w[0]);//这里直接计算出theta1的角度
+        qs[1] = atan2f(-P0_w[1], -P0_w[0]);//theta1的两个解，两个角相差180度，事实上这个解得舍去
         for (i = 0; i < 4; i++)
         {
             _outputSolves.solFlag[0 + i][0] = 1;
@@ -257,10 +261,10 @@ bool DOF6Kinematic::SolveIK(const DOF6Kinematic::Pose6D_t &_inputPose6D, const J
     }
     for (ind_arm = 0; ind_arm < 2; ind_arm++)
     {
-        cosqs = cosf(qs[ind_arm] + DH_matrix[0][0]);
-        sinqs = sinf(qs[ind_arm] + DH_matrix[0][0]);
+        cosqs = cosf(qs[ind_arm] );
+        sinqs = sinf(qs[ind_arm]);
 
-        R10[0] = cosqs;
+        R10[0] = cosqs;//构造R01矩阵的逆，也就是R10矩阵的转置
         R10[1] = sinqs;
         R10[2] = 0.0f;
         R10[3] = 0.0f;
@@ -271,21 +275,21 @@ bool DOF6Kinematic::SolveIK(const DOF6Kinematic::Pose6D_t &_inputPose6D, const J
         R10[8] = 0.0f;
 
         MatMultiply(R10, P0_w, P1_w, 3, 3, 1);
-        for (i = 0; i < 3; i++)
+        for (i = 0; i < 3; i++)//在坐标系1中计算
         {
-            L1_sw[i] = P1_w[i] - L1_base[i];
+            L1_sw[i] = P1_w[i] - L1_base[i];//这里要改为+，因为定义的时候添加了负号
         }
         l_sw_2 = L1_sw[0] * L1_sw[0] + L1_sw[1] * L1_sw[1];
         l_sw = sqrtf(l_sw_2);
 
-        if (fabs(l_se + l_ew - l_sw) <= 0.000001)
+        if (fabs(l_se + l_ew - l_sw) <= 0.000001)//这里是判断是否是边界
         {
-            qa[0][0] = atan2f(L1_sw[1], L1_sw[0]);
+            qa[0][0] = atan2f(L1_sw[1], L1_sw[0]);//theta2
             qa[1][0] = qa[0][0];
             qa[0][1] = 0.0f;
             qa[1][1] = 0.0f;
             if (l_sw > l_se + l_ew)
-            {
+            {//超出范围
                 for (i = 0; i < 2; i++)
                 {
                     _outputSolves.solFlag[4 * ind_arm + 0 + i][1] = 0;
@@ -299,7 +303,7 @@ bool DOF6Kinematic::SolveIK(const DOF6Kinematic::Pose6D_t &_inputPose6D, const J
                     _outputSolves.solFlag[4 * ind_arm + 2 + i][1] = 1;
                 }
             }
-        } else if (fabs(l_sw - fabs(l_se - l_ew)) <= 0.000001)
+        } else if (fabs(l_sw - fabs(l_se - l_ew)) <= 0.000001)//另一个边界，这个情况机械臂也达不到位置
         {
             qa[0][0] = atan2f(L1_sw[1], L1_sw[0]);
             qa[1][0] = qa[0][0];
@@ -340,17 +344,17 @@ bool DOF6Kinematic::SolveIK(const DOF6Kinematic::Pose6D_t &_inputPose6D, const J
             else acos_e = acosf(acos_e);
             if (0 == ind_arm)
             {
-                qa[0][0] = atan_a - acos_a + (float) M_PI_2;
-                qa[0][1] = atan_e - acos_e + (float) M_PI;
-                qa[1][0] = atan_a + acos_a + (float) M_PI_2;
-                qa[1][1] = atan_e + acos_e - (float) M_PI;
+                qa[0][0] = atan_a - acos_a ;
+                qa[0][1] = atan_e - acos_e + (float) M_PI_2;
+                qa[1][0] = atan_a + acos_a ;
+                qa[1][1] = atan_e + acos_e - (float) M_PI_2*3;
 
             } else
             {
-                qa[0][0] = atan_a + acos_a + (float) M_PI_2;
-                qa[0][1] = atan_e + acos_e - (float) M_PI;
-                qa[1][0] = atan_a - acos_a + (float) M_PI_2;
-                qa[1][1] = atan_e - acos_e + (float) M_PI;
+                qa[0][0] = atan_a + acos_a ;
+                qa[0][1] = -atan_e + acos_e - (float) M_PI;
+                qa[1][0] = atan_a - acos_a ;
+                qa[1][1] = -atan_e - acos_e + (float) M_PI_2*3;
             }
             for (i = 0; i < 2; i++)
             {
@@ -358,26 +362,29 @@ bool DOF6Kinematic::SolveIK(const DOF6Kinematic::Pose6D_t &_inputPose6D, const J
                 _outputSolves.solFlag[4 * ind_arm + 2 + i][1] = 1;
             }
         }
+
+        //下面开始算后三个关节，与姿态相关
         for (ind_elbow = 0; ind_elbow < 2; ind_elbow++)
         {
-            cosqa[0] = cosf(qa[ind_elbow][0] + DH_matrix[1][0]);
-            sinqa[0] = sinf(qa[ind_elbow][0] + DH_matrix[1][0]);
-            cosqa[1] = cosf(qa[ind_elbow][1] + DH_matrix[2][0]);
-            sinqa[1] = sinf(qa[ind_elbow][1] + DH_matrix[2][0]);
+            cosqa[0] = cosf(qa[ind_elbow][0] );
+            sinqa[0] = sinf(qa[ind_elbow][0] );
+            cosqa[1] = cosf(qa[ind_elbow][1] );
+            sinqa[1] = sinf(qa[ind_elbow][1] );
 
-            R31[0] = cosqa[0] * cosqa[1] - sinqa[0] * sinqa[1];
+            R31[0] = cosqa[0] * cosqa[1] - sinqa[0] * sinqa[1];//这里根据已经求出来的theta2和theta3，计算R31矩阵，也就是R13的逆
             R31[1] = cosqa[0] * sinqa[1] + sinqa[0] * cosqa[1];
             R31[2] = 0.0f;
             R31[3] = 0.0f;
             R31[4] = 0.0f;
-            R31[5] = 1.0f;
-            R31[6] = cosqa[0] * sinqa[1] + sinqa[0] * cosqa[1];
-            R31[7] = -cosqa[0] * cosqa[1] + sinqa[0] * sinqa[1];
+            R31[5] = -1.0f;
+            R31[6] = -cosqa[0] * sinqa[1] - sinqa[0] * cosqa[1];
+            R31[7] = cosqa[0] * cosqa[1] - sinqa[0] * sinqa[1];
             R31[8] = 0.0f;
 
             MatMultiply(R31, R10, R30, 3, 3, 3);
-            MatMultiply(R30, R06, R36, 3, 3, 3);
+            MatMultiply(R30, R06, R36, 3, 3, 3);//计算R36矩阵，然后ZYZ角解出theta4、5、6
 
+            // printf("R36:,%f,%f,%f,%f,%f,%f,%f,%f,%f\r\n", R36[0],R36[1],R36[2],R36[3],R36[4],R36[5],R36[6],R36[7],R36[8]);
             if (R36[8] >= 1.0 - 0.000001)
             {
                 cosqw = 1.0f;
@@ -412,24 +419,16 @@ bool DOF6Kinematic::SolveIK(const DOF6Kinematic::Pose6D_t &_inputPose6D, const J
             {
                 if (0 == ind_arm)
                 {
-                    qw[0][0] = _lastJoint6D.a[3];
-                    cosqw = cosf(_lastJoint6D.a[3] + DH_matrix[3][0]);
-                    sinqw = sinf(_lastJoint6D.a[3] + DH_matrix[3][0]);
-                    qw[0][2] = atan2f(cosqw * R36[3] - sinqw * R36[0], cosqw * R36[0] + sinqw * R36[3]);
-                    qw[1][2] = _lastJoint6D.a[5];
-                    cosqw = cosf(_lastJoint6D.a[5] + DH_matrix[5][0]);
-                    sinqw = sinf(_lastJoint6D.a[5] + DH_matrix[5][0]);
-                    qw[1][0] = atan2f(cosqw * R36[3] - sinqw * R36[0], cosqw * R36[0] + sinqw * R36[3]);
+                    qw[0][0] = atan2f(R36[3], R36[0]);
+                    qw[0][2] = 0.0f;
+                    qw[1][2] = 0.0f;
+                    qw[1][0] = qw[0][0];
                 } else
                 {
-                    qw[0][2] = _lastJoint6D.a[5];
-                    cosqw = cosf(_lastJoint6D.a[5] + DH_matrix[5][0]);
-                    sinqw = sinf(_lastJoint6D.a[5] + DH_matrix[5][0]);
-                    qw[0][0] = atan2f(cosqw * R36[3] - sinqw * R36[0], cosqw * R36[0] + sinqw * R36[3]);
-                    qw[1][0] = _lastJoint6D.a[3];
-                    cosqw = cosf(_lastJoint6D.a[3] + DH_matrix[3][0]);
-                    sinqw = sinf(_lastJoint6D.a[3] + DH_matrix[3][0]);
-                    qw[1][2] = atan2f(cosqw * R36[3] - sinqw * R36[0], cosqw * R36[0] + sinqw * R36[3]);
+                    qw[0][0] = atan2f(R36[3], R36[0]);
+                    qw[0][2] = 0.0f;
+                    qw[1][2] = 0.0f;
+                    qw[1][0] = qw[0][0];
                 }
                 _outputSolves.solFlag[4 * ind_arm + 2 * ind_elbow + 0][2] = -1;
                 _outputSolves.solFlag[4 * ind_arm + 2 * ind_elbow + 1][2] = -1;

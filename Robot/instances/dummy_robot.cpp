@@ -1,6 +1,5 @@
 #include "communication.hpp"
 #include "dummy_robot.h"
-
 inline float AbsMaxOf6(DOF6Kinematic::Joint6D_t _joints, uint8_t &_index)
 {//判断6个关节的绝对值最大值，并返回最大值和对应的关节序号
     float max = -1;
@@ -22,14 +21,14 @@ DummyRobot::DummyRobot(CAN_HandleTypeDef* _hcan) :
 {
     motorJ[ALL] = new CtrlStepMotor(_hcan, 0, false, 1, -180, 180);
     motorJ[1] = new CtrlStepMotor(_hcan, 1, true, 50, -170, 170);
-    motorJ[2] = new CtrlStepMotor(_hcan, 2, false, 50, -73, 90);
-    motorJ[3] = new CtrlStepMotor(_hcan, 3, true, 50, 35, 180);
-    motorJ[4] = new CtrlStepMotor(_hcan, 4, false, 50, -180, 180);
+    motorJ[2] = new CtrlStepMotor(_hcan, 2, false, 50, -166, 1);
+    motorJ[3] = new CtrlStepMotor(_hcan, 3, false, 50, -56, 91);
+    motorJ[4] = new CtrlStepMotor(_hcan, 4, true, 50, -180, 180);
     motorJ[5] = new CtrlStepMotor(_hcan, 5, true, 50, -120, 120);
-    motorJ[6] = new CtrlStepMotor(_hcan, 6, true, 1, -720, 720);
+    motorJ[6] = new CtrlStepMotor(_hcan, 6, false, 30, -720, 720);
     // hand = new DummyHand(_hcan, 7);
 
-    dof6Solver = new DOF6Kinematic(0.109f, 0.035f, 0.146f, 0.115f, 0.052f, 0.072f);
+    dof6Solver = new DOF6Kinematic(0.133f, 0.035f, 0.146f, 0.117f, 0.052f, 0.0755f);
 }
 
 
@@ -46,7 +45,7 @@ DummyRobot::~DummyRobot()
 void DummyRobot::Init()
 {
     SetCommandMode(DEFAULT_COMMAND_MODE);//默认模式为interraptable
-    SetJointSpeed(DEFAULT_JOINT_SPEED);//默认为30度/s
+    SetJointSpeed(DEFAULT_JOINT_SPEED);//默认为30r/s
 }
 
 
@@ -74,7 +73,7 @@ bool DummyRobot::MoveJ(float _j1, float _j2, float _j3, float _j4, float _j5, fl
     bool valid = true;
 
     for (int j = 1; j <= 6; j++)
-    {
+    {//判断6个关节运动返回是否超过了限位
         if (targetJointsTmp.a[j - 1] > motorJ[j]->angleLimitMax ||
             targetJointsTmp.a[j - 1] < motorJ[j]->angleLimitMin)
             valid = false;
@@ -101,6 +100,63 @@ bool DummyRobot::MoveJ(float _j1, float _j2, float _j3, float _j4, float _j5, fl
     return false;
 }
 
+bool DummyRobot::ikCalculate(float _x, float _y, float _z, float _a, float _b, float _c)
+{
+    DOF6Kinematic::Pose6D_t pose6D(_x, _y, _z, _a, _b, _c);
+    DOF6Kinematic::IKSolves_t ikSolves{};
+    DOF6Kinematic::Joint6D_t lastJoint6D{};
+    dof6Solver->SolveIK(pose6D, lastJoint6D, ikSolves);
+    bool valid[8];
+    int validCnt = 0;
+
+
+    for (int i = 0; i < 8; i++)
+    {
+        valid[i] = true;
+        printf("solution%d:%f,%f,%f,%f,%f,%f\r\n", i,ikSolves.config[i].a[0],ikSolves.config[i].a[1],ikSolves.config[i].a[2],
+            ikSolves.config[i].a[3],ikSolves.config[i].a[4],ikSolves.config[i].a[5]);
+
+        for (int j = 1; j <= 6; j++)
+        {
+            if (ikSolves.config[i].a[j - 1] > motorJ[j]->angleLimitMax ||
+                ikSolves.config[i].a[j - 1] < motorJ[j]->angleLimitMin)
+            {
+                valid[i] = false;
+                break;
+            }
+        }
+
+        if (valid[i]) validCnt++;
+    }
+
+    if (validCnt)
+    {
+        float min = 1000;
+        uint8_t indexConfig = 0, indexJoint = 0;
+        for (int i = 0; i < 8; i++)
+        {
+            if (valid[i])
+            {
+                for (int j = 0; j < 6; j++)
+                    lastJoint6D.a[j] = ikSolves.config[i].a[j];
+                DOF6Kinematic::Joint6D_t tmp = currentJoints - lastJoint6D;
+                float maxAngle = AbsMaxOf6(tmp, indexJoint);
+                if (maxAngle < min)
+                {
+                    min = maxAngle;
+                    indexConfig = i;
+                }
+            }
+        }
+
+        ikResultJoint = {ikSolves.config[indexConfig].a[0], ikSolves.config[indexConfig].a[1],
+                     ikSolves.config[indexConfig].a[2], ikSolves.config[indexConfig].a[3],
+                     ikSolves.config[indexConfig].a[4], ikSolves.config[indexConfig].a[5]};
+        return true;
+    }
+
+    return false;
+}
 
 bool DummyRobot::MoveL(float _x, float _y, float _z, float _a, float _b, float _c)
 {
@@ -235,7 +291,7 @@ void DummyRobot::Homing()
     float lastSpeed = jointSpeed;
     SetJointSpeed(10);
 
-    MoveJ(0, 0, 90, 0, 0, 0);
+    MoveJ(0, -90, 0, 0, 0, 0);
     MoveJoints(targetJoints);
     while (IsMoving())
         osDelay(10);
