@@ -109,8 +109,8 @@ DOF6Kinematic::DOF6Kinematic(float L_BS, float D_BS, float L_AM, float L_FA, flo
     l_se_2 = armConfig.L_ARM * armConfig.L_ARM;
     l_se = armConfig.L_ARM;
     l_ew_2 = armConfig.L_FOREARM * armConfig.L_FOREARM + armConfig.D_ELBOW * armConfig.D_ELBOW;
-    l_ew = 0;
-    atan_e = 0;
+    l_ew = sqrtf(l_ew_2);
+    atan_e = atanf(armConfig.D_ELBOW / armConfig.L_FOREARM);
 }
 
 bool
@@ -207,11 +207,11 @@ bool DOF6Kinematic::SolveIK(const DOF6Kinematic::Pose6D_t &_inputPose6D, const J
     int ind_arm, ind_elbow, ind_wrist;
     int i;
 
-    if (0 == l_ew)
-    {
-        l_ew = sqrtf(l_ew_2);
-        atan_e = atanf(armConfig.D_ELBOW / armConfig.L_FOREARM);
-    }
+    // if (0 == l_ew)
+    // {
+    //     l_ew = sqrtf(l_ew_2);
+    //     atan_e = atanf(armConfig.D_ELBOW / armConfig.L_FOREARM);
+    // }
 
     P06[0] = _inputPose6D.X / 1000.0f;//转换为m
     P06[1] = _inputPose6D.Y / 1000.0f;
@@ -242,11 +242,11 @@ bool DOF6Kinematic::SolveIK(const DOF6Kinematic::Pose6D_t &_inputPose6D, const J
     }
     if (sqrt(P0_w[0] * P0_w[0] + P0_w[1] * P0_w[1]) <= 0.000001)//判断x、y坐标是否为0
     {//这个情况可以直接忽略，机械臂不可能到达这个位置
-        qs[0] = _lastJoint6D.a[0];
+        qs[0] = _lastJoint6D.a[0];//此时theta1可以为任意值，为了减少运动，那么就认定位置不变
         qs[1] = _lastJoint6D.a[0];
         for (i = 0; i < 4; i++)
         {
-            _outputSolves.solFlag[0 + i][0] = -1;//感觉这个标志位是用来判断是否有解的
+            _outputSolves.solFlag[0 + i][0] = -1;//-1代表theta1可以为任意值，为了减少运动，那么就认定位置不变
             _outputSolves.solFlag[4 + i][0] = -1;
         }
     } else
@@ -255,12 +255,12 @@ bool DOF6Kinematic::SolveIK(const DOF6Kinematic::Pose6D_t &_inputPose6D, const J
         qs[1] = atan2f(-P0_w[1], -P0_w[0]);//theta1的两个解，两个角相差180度，事实上这个解得舍去
         for (i = 0; i < 4; i++)
         {
-            _outputSolves.solFlag[0 + i][0] = 1;
+            _outputSolves.solFlag[0 + i][0] = 1;//1代表正常解
             _outputSolves.solFlag[4 + i][0] = 1;
         }
     }
     for (ind_arm = 0; ind_arm < 2; ind_arm++)
-    {
+    {//下面一部分是求解theta2、theta3，主要运用的就是几何法，对两个三角形考虑余弦定理
         cosqs = cosf(qs[ind_arm] );
         sinqs = sinf(qs[ind_arm]);
 
@@ -286,20 +286,20 @@ bool DOF6Kinematic::SolveIK(const DOF6Kinematic::Pose6D_t &_inputPose6D, const J
         {
             qa[0][0] = atan2f(L1_sw[1], L1_sw[0]);//theta2
             qa[1][0] = qa[0][0];
-            qa[0][1] = 0.0f;
-            qa[1][1] = 0.0f;
+            qa[0][1] = -(((float) M_PI_2) - atan_e);
+            qa[1][1] = -(((float) M_PI_2) - atan_e);
             if (l_sw > l_se + l_ew)
             {//超出范围
                 for (i = 0; i < 2; i++)
                 {
-                    _outputSolves.solFlag[4 * ind_arm + 0 + i][1] = 0;
+                    _outputSolves.solFlag[4 * ind_arm + 0 + i][1] = 0;//0代表到不了，但几乎重合
                     _outputSolves.solFlag[4 * ind_arm + 2 + i][1] = 0;
                 }
             } else
             {
                 for (i = 0; i < 2; i++)
                 {
-                    _outputSolves.solFlag[4 * ind_arm + 0 + i][1] = 1;
+                    _outputSolves.solFlag[4 * ind_arm + 0 + i][1] = 1;//1代表正常解
                     _outputSolves.solFlag[4 * ind_arm + 2 + i][1] = 1;
                 }
             }
@@ -309,12 +309,12 @@ bool DOF6Kinematic::SolveIK(const DOF6Kinematic::Pose6D_t &_inputPose6D, const J
             qa[1][0] = qa[0][0];
             if (0 == ind_arm)
             {
-                qa[0][1] = (float) M_PI;
-                qa[1][1] = -(float) M_PI;
+                qa[0][1] = (float) M_PI_2+ atan_e;
+                qa[1][1] = -(float) M_PI_2*3+ atan_e;
             } else
             {
-                qa[0][1] = -(float) M_PI;
-                qa[1][1] = (float) M_PI;
+                qa[0][1] = (float) M_PI_2+ atan_e;
+                qa[1][1] = -(float) M_PI_2*3+ atan_e;
             }
             if (l_sw < fabs(l_se - l_ew))
             {
@@ -335,8 +335,8 @@ bool DOF6Kinematic::SolveIK(const DOF6Kinematic::Pose6D_t &_inputPose6D, const J
         {
             atan_a = atan2f(L1_sw[1], L1_sw[0]);
             acos_a = 0.5f * (l_se_2 + l_sw_2 - l_ew_2) / (l_se * l_sw);
-            if (acos_a >= 1.0f) acos_a = 0.0f;
-            else if (acos_a <= -1.0f) acos_a = (float) M_PI;
+            if (acos_a >= 1.0f) acos_a = 0.0f;//即使超出范围，它也会保证关节二四的连线与4的目标点共线
+            else if (acos_a <= -1.0f) acos_a = 0.0f;//二次方程角度考虑，这个情况不可能
             else acos_a = acosf(acos_a);
             acos_e = 0.5f * (l_se_2 + l_ew_2 - l_sw_2) / (l_se * l_ew);
             if (acos_e >= 1.0f) acos_e = 0.0f;
@@ -352,7 +352,7 @@ bool DOF6Kinematic::SolveIK(const DOF6Kinematic::Pose6D_t &_inputPose6D, const J
             } else
             {
                 qa[0][0] = atan_a + acos_a ;
-                qa[0][1] = -atan_e + acos_e - (float) M_PI;
+                qa[0][1] = -atan_e + acos_e - (float) M_PI_2;
                 qa[1][0] = atan_a - acos_a ;
                 qa[1][1] = -atan_e - acos_e + (float) M_PI_2*3;
             }
@@ -366,6 +366,7 @@ bool DOF6Kinematic::SolveIK(const DOF6Kinematic::Pose6D_t &_inputPose6D, const J
         //下面开始算后三个关节，与姿态相关
         for (ind_elbow = 0; ind_elbow < 2; ind_elbow++)
         {
+
             cosqa[0] = cosf(qa[ind_elbow][0] );
             sinqa[0] = sinf(qa[ind_elbow][0] );
             cosqa[1] = cosf(qa[ind_elbow][1] );

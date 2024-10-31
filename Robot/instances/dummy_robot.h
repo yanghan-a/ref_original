@@ -104,11 +104,11 @@ public:
 
 
     // This is the pose when power on.
-    const DOF6Kinematic::Joint6D_t REST_POSE = {0, -165, 90, 0, 0, 0};//{0, -73, 180, 0, 0, 0};
-    const float DEFAULT_JOINT_SPEED = 30;  // r/s
+    const DOF6Kinematic::Joint6D_t REST_POSE = {0, -165.3, 90, 0, 0, 0};//{0, -73, 180, 0, 0, 0};
+    const float DEFAULT_JOINT_SPEED = 60;  // r/s 30 实际上这个值还得除以10，也就是6圈/s
     const DOF6Kinematic::Joint6D_t DEFAULT_JOINT_ACCELERATION_BASES = {150, 100, 200, 200, 200, 200};
-    const float DEFAULT_JOINT_ACCELERATION_LOW = 30;    // 0~100
-    const float DEFAULT_JOINT_ACCELERATION_HIGH = 100;  // 0~100
+    const float DEFAULT_JOINT_ACCELERATION_LOW = 5;    // 0~100 30
+    const float DEFAULT_JOINT_ACCELERATION_HIGH = 100;  // 0~100 100
     const CommandMode DEFAULT_COMMAND_MODE = COMMAND_TARGET_POINT_INTERRUPTABLE;
 
 

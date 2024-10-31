@@ -122,7 +122,7 @@ static void UartServerTask(void* ctx)
         // deadline_ms = timeout_to_deadline(PROTOCOL_SERVER_TIMEOUT_MS);
         // Process bytes in one or two chunks (two in case there was a wrap)
         if (new_rcv_idx < dma_last_rcv_idx[0])
-        {
+        {//接收到的数据小于最大容量
             uart4_stream_input.process_bytes(dma_rx_buffer[0] + dma_last_rcv_idx[0],
                                              UART_RX_BUFFER_SIZE - dma_last_rcv_idx[0],
                                              nullptr); // TODO: use process_all
@@ -131,7 +131,7 @@ static void UartServerTask(void* ctx)
             dma_last_rcv_idx[0] = 0;
         }
         if (new_rcv_idx > dma_last_rcv_idx[0])
-        {
+        {//接收到的数据大于最大容量
             uart4_stream_input.process_bytes(dma_rx_buffer[0] + dma_last_rcv_idx[0],
                                              new_rcv_idx - dma_last_rcv_idx[0],
                                              nullptr); // TODO: use process_all
@@ -153,7 +153,7 @@ static void UartServerTask(void* ctx)
         // deadline_ms = timeout_to_deadline(PROTOCOL_SERVER_TIMEOUT_MS);
         // Process bytes in one or two chunks (two in case there was a wrap)
         if (new_rcv_idx < dma_last_rcv_idx[1])
-        {
+        {//接收到的数据小于最大容量
             uart4_stream_input.process_bytes(dma_rx_buffer[1] + dma_last_rcv_idx[1],
                                              UART_RX_BUFFER_SIZE - dma_last_rcv_idx[1],
                                              nullptr); // TODO: use process_all
@@ -162,7 +162,7 @@ static void UartServerTask(void* ctx)
             dma_last_rcv_idx[1] = 0;
         }
         if (new_rcv_idx > dma_last_rcv_idx[1])
-        {
+        {//接收到的数据大于最大容量
             uart4_stream_input.process_bytes(dma_rx_buffer[1] + dma_last_rcv_idx[1],
                                              new_rcv_idx - dma_last_rcv_idx[1],
                                              nullptr); // TODO: use process_all

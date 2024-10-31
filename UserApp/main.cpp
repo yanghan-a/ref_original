@@ -3,7 +3,7 @@
 // On-board Screen, can choose from hi2c2 or hi2c0(soft i2c)
 SSD1306 oled(&hi2c0);
 // On-board Sensor, used hi2c1
-MPU6050 mpu6050(&hi2c1);
+// MPU6050 mpu6050(&hi2c1);
 // 5 User-Timers, can choose from htim7/htim10/htim11/htim13/htim14
 Timer timerCtrlLoop(&htim7, 200);
 // 2x2-channel PWMs, used htim9 & htim12, each has 2-channel outputs
@@ -27,12 +27,12 @@ void Main(void)
     dummy.Init();
 
     // Init IMU.
-    do
-    {
-        mpu6050.Init();
-        osDelay(100);
-    } while (!mpu6050.testConnection());
-    mpu6050.InitFilter(200, 100, 50);
+    // do
+    // {
+    //     mpu6050.Init();
+    //     osDelay(100);
+    // } while (!mpu6050.testConnection());
+    // mpu6050.InitFilter(200, 100, 50);
 
     // Init OLED 128x80.
     oled.Init();
@@ -132,12 +132,12 @@ void ThreadOledUpdate(void* argument)
 
     for (;;)
     {
-        mpu6050.Update(true);
+        // mpu6050.Update(true);
 
         oled.clearBuffer();
         oled.setFont(u8g2_font_5x8_tr);
-        oled.setCursor(0, 10);
-        oled.printf("IMU:%.3f/%.3f", mpu6050.data.ax, mpu6050.data.ay);
+        // oled.setCursor(0, 10);
+        // oled.printf("IMU:%.3f/%.3f", mpu6050.data.ax, mpu6050.data.ay);
         oled.setCursor(85, 10);
         oled.printf("| FPS:%lu", 1000000 / (micros() - t));
         t = micros();

@@ -24,11 +24,11 @@ DummyRobot::DummyRobot(CAN_HandleTypeDef* _hcan) :
     motorJ[2] = new CtrlStepMotor(_hcan, 2, false, 50, -166, 1);
     motorJ[3] = new CtrlStepMotor(_hcan, 3, false, 50, -56, 91);
     motorJ[4] = new CtrlStepMotor(_hcan, 4, true, 50, -180, 180);
-    motorJ[5] = new CtrlStepMotor(_hcan, 5, true, 50, -120, 120);
-    motorJ[6] = new CtrlStepMotor(_hcan, 6, false, 30, -720, 720);
+    motorJ[5] = new CtrlStepMotor(_hcan, 5, false, 50, -120, 120);
+    motorJ[6] = new CtrlStepMotor(_hcan, 6, false, 50, -720, 720);
     // hand = new DummyHand(_hcan, 7);
 
-    dof6Solver = new DOF6Kinematic(0.133f, 0.035f, 0.146f, 0.117f, 0.052f, 0.0755f);
+    dof6Solver = new DOF6Kinematic(0.133f, 0.035f, 0.146f, 0.117f, 0.052f, 0.0855f);
 }
 
 
@@ -113,7 +113,7 @@ bool DummyRobot::ikCalculate(float _x, float _y, float _z, float _a, float _b, f
     for (int i = 0; i < 8; i++)
     {
         valid[i] = true;
-        printf("solution%d:%f,%f,%f,%f,%f,%f\r\n", i,ikSolves.config[i].a[0],ikSolves.config[i].a[1],ikSolves.config[i].a[2],
+        printf("solution%d:%.1f,%.1f,%.1f,%.1f,%.1f,%.1f \r\n", i,ikSolves.config[i].a[0],ikSolves.config[i].a[1],ikSolves.config[i].a[2],
             ikSolves.config[i].a[3],ikSolves.config[i].a[4],ikSolves.config[i].a[5]);
 
         for (int j = 1; j <= 6; j++)
@@ -289,7 +289,7 @@ void DummyRobot::CalibrateHomeOffset()
 void DummyRobot::Homing()
 {
     float lastSpeed = jointSpeed;
-    SetJointSpeed(10);
+    SetJointSpeed(20);
 
     MoveJ(0, -90, 0, 0, 0, 0);
     MoveJoints(targetJoints);
@@ -303,7 +303,7 @@ void DummyRobot::Homing()
 void DummyRobot::Resting()
 {
     float lastSpeed = jointSpeed;
-    SetJointSpeed(10);
+    SetJointSpeed(20);
 
     MoveJ(REST_POSE.a[0], REST_POSE.a[1], REST_POSE.a[2],
           REST_POSE.a[3], REST_POSE.a[4], REST_POSE.a[5]);
